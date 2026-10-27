@@ -66,7 +66,7 @@ button{cursor:pointer}
 </div>
 
 <div id="flt" class="modal" style="display:none"><div class="box"><h1>Linije na stanici</h1>
-  <div class="mut" style="font-size:14px;margin-bottom:8px">Ako ništa ne menjaš, prikazuju se sve linije.</div>
+  <div class="mut" style="font-size:14px;margin-bottom:8px">Sve linije koje prolaze kroz stanicu (po OpenStreetMap-u, plus viđene uživo). Ako ništa ne menjaš, prikazuju se sve.</div>
   <div id="fl"></div>
   <div class="btns"><button id="fall">Prikaži sve</button><button id="fclose">Gotovo</button></div>
 </div></div>
@@ -87,8 +87,38 @@ function api(path,ok,fail){
   var x=new XMLHttpRequest();x.open('GET',API+path,true);x.timeout=15000;
   x.onload=function(){var j;try{j=JSON.parse(x.responseText)}catch(e){fail('neispravan odgovor');return}
     if(x.status>=200&&x.status<300)ok(j);else fail((j&&j.error)||x.status)};
-  x.onerror=function(){fail('mreža')};x.ontimeout=function(){fail('vreme isteklo')};
+  x.onerror=function(){fail('mreža – nema veze sa serverom (proveri internet ili HTTPS sertifikat)')};x.ontimeout=function(){fail('vreme isteklo')};
   x.send();
+}
+function showErr(el,e){
+  el.innerHTML='';var m=document.createElement('div');m.className='msg err';m.textContent='Greška: '+e;el.appendChild(m);
+  if(String(e).indexOf('mreža')===0){
+    var a=document.createElement('a');a.href=API+'/api/cities';a.target='_blank';a.style.color='#ffb000';
+    a.textContent='Dodirni da testiraš vezu sa serverom';var p=document.createElement('div');p.className='msg';p.appendChild(a);el.appendChild(p)}
+}
+/* Overpass (OpenStreetMap): linije koje prolaze kroz stanicu */
+var OVP=['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+function overpass(q,ok,fail,i){
+  i=i||0;if(i>=OVP.length)return fail('Overpass nedostupan');
+  var x=new XMLHttpRequest();x.open('POST',OVP[i],true);x.timeout=30000;
+  x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+  x.onload=function(){var j;try{j=JSON.parse(x.responseText)}catch(e){return overpass(q,ok,fail,i+1)}
+    if(x.status>=200&&x.status<300)ok(j);else overpass(q,ok,fail,i+1)};
+  x.onerror=x.ontimeout=function(){overpass(q,ok,fail,i+1)};
+  x.send('data='+encodeURIComponent(q));
+}
+function passFor(f,cb){
+  if(f.pass)return cb(f.pass,'');
+  stations(function(sts){
+    var s=null;for(var i=0;i<sts.length;i++)if(sts[i].uid==f.uid)s=sts[i];
+    if(!s)return cb([],'stanica nije pronađena');
+    var q='[out:json][timeout:25];way(around:35,'+s.lat+','+s.lon+')->.w;rel(bw.w)["route"~"^(bus|trolleybus)$"];out tags;';
+    overpass(q,function(j){
+      var set={},out=[],el=j.elements||[];
+      for(var k=0;k<el.length;k++){var r=el[k].tags&&el[k].tags.ref;if(r&&!set[r]){set[r]=1;out.push(r)}}
+      out.sort(nat);f.pass=out;save();cb(out,'');
+    },function(e){cb([],e)});
+  },function(e){cb([],e)});
 }
 var ST=null,stQ=[];
 function stations(cb,fail){
@@ -203,7 +233,7 @@ function buildHome(){
 function refreshOne(f,i){
   api('/api/arrivals?city='+CITY+'&uid='+encodeURIComponent(f.uid),function(raw){
     lastOk=Date.now();if(bodies[i])rows(bodies[i],prep(f,'h'+f.uid,raw),(f.lines&&f.lines.length)?f.lines.length:3);renderSync()
-  },function(e){if(bodies[i])bodies[i].textContent='Greška: '+e});
+  },function(e){if(bodies[i])showErr(bodies[i],e)});
 }
 function refreshHome(){for(var i=0;i<favs.length;i++)refreshOne(favs[i],i)}
 
@@ -212,14 +242,27 @@ function refreshDetail(){
   var f=cur;if(!f)return;
   api('/api/arrivals?city='+CITY+'&uid='+encodeURIComponent(f.uid),function(raw){
     if(cur!==f)return;lastOk=Date.now();rows($('dlist'),prep(f,'d'+f.uid,raw),30);renderSync();
-  },function(e){if(cur!==f)return;var d=$('dlist');d.innerHTML='';d.appendChild(mk('div','msg err','Greška: '+e))});
+  },function(e){if(cur!==f)return;showErr($('dlist'),e)});
 }
 
 /* ---- filter linija ---- */
 function renderFlt(){
-  var f=favOf(cur),box=$('fl'),known=(f.known||[]).slice().sort(nat);
+  var f=favOf(cur),box=$('fl');
+  if(!f.pass){
+    box.innerHTML='';box.appendChild(mk('div','mut','Tražim linije koje prolaze kroz stanicu…'));
+    passFor(f,function(p,err){if(favOf(cur)!==f)return;if(err)f.passErr=err;renderFlt2(f,err)});return;
+  }
+  renderFlt2(f,'');
+}
+function renderFlt2(f,err){
+  var box=$('fl'),all=(f.known||[]).slice(),known=[],seen={},i;
+  var pass=f.pass||[];
+  for(i=0;i<pass.length;i++)all.push(pass[i]);
+  for(i=0;i<all.length;i++)if(!seen[all[i]]){seen[all[i]]=1;known.push(all[i])}
+  known.sort(nat);
   box.innerHTML='';
-  if(!known.length){box.appendChild(mk('div','mut','Još nije viđena nijedna linija. Pokušaj za koji trenutak.'));return}
+  if(err)box.appendChild(mk('div','mut','Trase se ne mogu učitati ('+err+'); prikazane su samo linije viđene uživo.'));
+  if(!known.length){box.appendChild(mk('div','mut','Nijedna linija nije pronađena za ovu stanicu.'));return}
   var sel=(f.lines&&f.lines.length)?f.lines:known;
   for(var i=0;i<known.length;i++){
     var lab=mk('label','fr'),cb=document.createElement('input');cb.type='checkbox';cb.checked=indexOf(sel,known[i])>=0;
@@ -228,14 +271,13 @@ function renderFlt(){
       var inputs=box.getElementsByTagName('input'),on=[];
       for(var k=0;k<inputs.length;k++)if(inputs[k].checked)on.push(known[k]);
       f.lines=(on.length==known.length||!on.length)?[]:on; // sve ili ništa = sve linije
-      save();renderFlt();refreshDetail();
+      save();renderFlt2(f,err);refreshDetail();
     };
     lab.appendChild(cb);lab.appendChild(b);box.appendChild(lab);
   }
 }
 $('fbtn').onclick=function(){renderFlt();show('flt',true)};
-$('fall').onclick=function(){favOf(cur).lines=[];save();renderFlt();refreshDetail()};
-$('fclose').onclick=function(){show('flt',false)};
+$('fall').onclick=function(){favOf(cur).lines=[];save();renderFlt();refreshDetail()};$('fclose').onclick=function(){show('flt',false)};
 
 /* ---- dodavanje stanice ---- */
 function addFav(s){return function(){if(!isFav(s)){favs.push({city:CITY,uid:s.uid,id:s.id,name:s.name});save()}go('home')}}
@@ -249,7 +291,7 @@ $('q').oninput=function(){
       if(s.name.toLowerCase().indexOf(q)>=0||String(s.id).toLowerCase()==q){
         var d=mk('div'),b=mk('b',null,s.name),sm=mk('small','mut',' #'+s.id);d.appendChild(b);d.appendChild(sm);d.onclick=addFav(s);box.appendChild(d);n++}}
     if(!n)box.appendChild(mk('div','mut','Nema rezultata.'));
-  },function(e){box.innerHTML='';box.appendChild(mk('div','err','Greška: '+e))});
+  },function(e){showErr(box,e)});
 };
 
 go('home');if(!favs.length)go('add');
