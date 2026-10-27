@@ -26,6 +26,8 @@ button{cursor:pointer}
 .eta{text-align:right;color:#ffb000;font-size:26px;line-height:1;margin-left:8px;white-space:nowrap}
 .eta small{display:block;margin-top:3px}
 .row.idle .eta{color:#9aa0a6}
+.sch{font-size:12px;color:#9aa0a6;margin-top:3px}
+.sch div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sch b{color:#fff}
 .tr{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:8px;vertical-align:middle;position:relative;top:-2px}
 .tr.on{background:#34c759;-webkit-animation:pl 2s infinite;animation:pl 2s infinite}
 .tr.off{border:1.5px solid #9aa0a6}
@@ -194,6 +196,41 @@ function prep(f0,key,raw){
   return lines;
 }
 function mk(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e}
+/* ---- red vožnje (polasci sa početne stanice) za linije bez vozila uživo ---- */
+var SCH={};
+function pad2(n){return n<10?'0'+n:''+n}
+function schedDay(){var w=new Date(Date.now()-3*36e5).getDay();return w===0?'N':(w===6?'S':'R')} // noćni polasci pripadaju prethodnom danu
+function nowMin(){var n=Date.now(),d=new Date(n-3*36e5);return Math.floor((n-new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime())/6e4)}
+function hhmm(t){return pad2(Math.floor(t/60)%24)+':'+pad2(t%60)}
+function isIn(el){while(el){if(el===document.body)return true;el=el.parentNode}return false}
+function drawSched(el,data){
+  el.innerHTML='';var now=nowMin(),i,j;
+  if(!data.dirs||!data.dirs.length){el.textContent='Nema polazaka po rasporedu za ovaj dan.';return}
+  el.appendChild(mk('div',null,'Po rasporedu, sa početne stanice:'));
+  for(i=0;i<data.dirs.length;i++){
+    var d=data.dirs[i],nx,row=mk('div');
+    for(j=0;j<d.times.length;j++)if(d.times[j]>=now){nx=d.times[j];break}
+    if(nx===undefined)row.textContent='nema više polazaka danas · '+d.label;
+    else{var m=nx-now;row.appendChild(mk('b',null,hhmm(nx)));
+      row.appendChild(document.createTextNode(' ('+(m<1?'sad':'za '+(m<60?m+' min':Math.floor(m/60)+' h '+(m%60)+' min'))+') · '+d.label))}
+    el.appendChild(row);
+  }
+}
+function fillSched(el,num){
+  var day=schedDay(),k=num+'|'+day,c=SCH[k];
+  if(c&&c.data&&Date.now()-c.t<216e5)return drawSched(el,c.data);
+  if(c&&c.err&&Date.now()-c.t<3e5){el.textContent='Raspored nije dostupan ('+c.err+')';return}
+  el.textContent='Učitavam raspored…';
+  if(!c||!c.w){
+    SCH[k]={w:[]};
+    api('/api/schedule?city='+CITY+'&line='+encodeURIComponent(num)+'&day='+day,function(d){fin(k,{data:d,t:Date.now()})},function(e){fin(k,{err:String(e),t:Date.now()})});
+  }
+  SCH[k].w.push([el,num]);
+}
+function fin(k,res){
+  var w=SCH[k].w;SCH[k]=res;
+  for(var i=0;i<w.length;i++)if(isIn(w[i][0]))fillSched(w[i][0],w[i][1]);
+}
 function rows(el,lines,max){
   el.innerHTML='';
   if(!lines.length){el.appendChild(mk('div','msg','Nema nailazećih vozila.'));return}
@@ -205,6 +242,7 @@ function rows(el,lines,max){
       t.textContent=l.title||'Nema vozila uživo';
       sm.textContent=(l.title?'Nema vozila uživo':'')+(l.seen?(l.title?' · ':'')+'viđeno pre '+agoTxt(Math.round((Date.now()-l.seen)/1000)):'');
       sp.textContent='—';
+      var sc=mk('div','sch');d.appendChild(sc);fillSched(sc,l.number);
     }else{
       t.textContent=l.title;
       if(l.arrivals.length>1){var z=[];for(var k=1;k<l.arrivals.length&&k<3;k++)z.push(fmt(l.arrivals[k].sec));sm.textContent='Zatim: '+z.join(', ')}
