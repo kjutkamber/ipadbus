@@ -26,6 +26,7 @@ button{cursor:pointer}
 .eta{text-align:right;color:#ffb000;font-size:26px;line-height:1;margin-left:8px;white-space:nowrap}
 .eta small{display:block;margin-top:3px}
 .row.idle .eta{color:#9aa0a6}
+.row.idle.sched .eta{color:#ffb000}
 .sch{font-size:12px;color:#9aa0a6;margin-top:3px}
 .sch div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sch b{color:#fff}
 .tr{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:8px;vertical-align:middle;position:relative;top:-2px}
@@ -299,8 +300,10 @@ function drawSched(el,data,ctx,l){
     for(j=0;j<d1.times.length;j++)if(d1.times[j]>=now){nx1=d1.times[j];break}
     ctx.t.textContent=d1.label||l.title||('Linija '+(l.number||''));
     ctx.sm.textContent='Nema vozila uživo · po rasporedu'+(l.seen?' · viđeno pre '+agoTxt(Math.round((Date.now()-l.seen)/1000)):'');
-    if(nx1===undefined){ctx.sp.textContent='—';ctx.es.textContent=d1.times.length?'sutra ~'+hhmm(d1.times[0]):'nema polazaka'}
-    else{ctx.sp.textContent=hhmm(nx1);ctx.es.textContent=inTxt(nx1-now)}
+    if(nx1===undefined){ctx.sp.textContent='—';ctx.es.textContent=d1.times.length?'sutra ~'+hhmm(d1.times[0]):'nema polazaka';ctx.row.className='row idle'}
+    else{var m1=nx1-now,dot=mk('i','tr off');dot.title='Po rasporedu, bez GPS-a';
+      ctx.sp.textContent=m1<1?'sad':(m1<60?m1+' min':Math.floor(m1/60)+' h '+(m1%60)+' min');ctx.sp.insertBefore(dot,ctx.sp.firstChild); // isto kao linija uživo (prazan krug = bez GPS-a)
+      ctx.es.textContent='polazak '+hhmm(nx1)+' sa početne';ctx.row.className='row idle sched'}
     return}
   el.appendChild(mk('div',null,'Po rasporedu, sa početne stanice:'));
   for(i=0;i<dirs.length;i++){
@@ -338,7 +341,7 @@ function rows(el,lines,max){
       t.textContent=l.title||'Nema vozila uživo';
       sm.textContent=(l.title?'Nema vozila uživo':'')+(l.seen?(l.title?' · ':'')+'viđeno pre '+agoTxt(Math.round((Date.now()-l.seen)/1000)):'');
       sp.textContent='—';
-      var sc=mk('div','sch');d.appendChild(sc);fillSched(sc,l.number,{t:t,sm:sm,sp:sp,es:es},l);
+      var sc=mk('div','sch');d.appendChild(sc);fillSched(sc,l.number,{t:t,sm:sm,sp:sp,es:es,row:r},l);
     }else{
       t.textContent=l.title;
       if(l.arrivals.length>1){var z=[];for(var k=1;k<l.arrivals.length&&k<3;k++)z.push(fmt(l.arrivals[k].sec));sm.textContent='Zatim: '+z.join(', ')}
