@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="sr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Novi Sad – autobusi</title>
+<style>
+*{-webkit-box-sizing:border-box;box-sizing:border-box}
+body{margin:0;background:#000;color:#fff;font:16px/1.3 "Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:640px;margin:0 auto;padding:12px}
+input,button{background:#111;color:#fff;border:1px solid #2a2a2a;border-radius:8px;padding:12px;font:inherit;-webkit-appearance:none}
+button{cursor:pointer}
+.hd{display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;padding:6px 0 10px;border-bottom:3px solid #fff}
+.hd h1{font-size:22px;margin:0}
+.hd button{margin-left:6px;padding:10px 12px}
+.mut{color:#9aa0a6}
+.sync{font-size:12px;color:#9aa0a6;margin:6px 0}
+.card{border-bottom:1px solid #2a2a2a;padding:14px 0}
+.card h2{font-size:18px;margin:0 0 8px;display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between}
+.card h2 span{color:#9aa0a6;font-size:14px}
+.row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;padding:8px 0}
+.big .row{padding:10px 0;border-bottom:1px solid #2a2a2a}
+.bullet{-webkit-flex:none;flex:none;min-width:40px;height:40px;border-radius:20px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;font-size:18px;padding:0 8px;color:#fff;margin-right:12px}
+.dest{-webkit-flex:1;flex:1;min-width:0}
+.dest b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dest small,.eta small{color:#9aa0a6;font-size:12px}
+.eta{text-align:right;color:#ffb000;font-size:26px;line-height:1;margin-left:8px;white-space:nowrap}
+.eta small{display:block;margin-top:3px}
+.row.idle .eta{color:#9aa0a6}
+.tr{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:8px;vertical-align:middle;position:relative;top:-2px}
+.tr.on{background:#34c759;-webkit-animation:pl 2s infinite;animation:pl 2s infinite}
+.tr.off{border:1.5px solid #9aa0a6}
+@-webkit-keyframes pl{0%{box-shadow:0 0 0 0 rgba(52,199,89,.7)}70%{box-shadow:0 0 0 7px rgba(52,199,89,0)}100%{box-shadow:0 0 0 0 rgba(52,199,89,0)}}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(52,199,89,.7)}70%{box-shadow:0 0 0 7px rgba(52,199,89,0)}100%{box-shadow:0 0 0 0 rgba(52,199,89,0)}}
+.msg{color:#9aa0a6;padding:24px 0;text-align:center}.err{color:#ff6b6b}
+#q{width:100%;margin:10px 0}
+.res div{padding:12px 4px;border-bottom:1px solid #2a2a2a}
+.modal{position:fixed;top:0;left:0;right:0;bottom:0;z-index:50;background:rgba(0,0,0,.75);display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center}
+.modal .box{background:#111;border:1px solid #2a2a2a;border-radius:14px;padding:18px;width:90%;max-width:360px;max-height:85%;overflow:auto}
+.modal h1{font-size:20px;margin:0 0 10px}
+.fr{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;padding:6px 0}
+.fr input{width:24px;height:24px;margin:0 12px 0 0;padding:0;-webkit-appearance:checkbox}
+.fr .bullet{min-width:34px;height:34px;font-size:15px;margin:0}
+.btns{display:-webkit-flex;display:flex;margin-top:12px}
+.btns button{-webkit-flex:1;flex:1;margin-right:8px}.btns button:last-child{margin-right:0}
+</style></head><body><div class="wrap">
+
+<div id="home">
+  <div class="hd"><h1>Moje stanice</h1><span><button id="plus">+ Dodaj</button></span></div>
+  <div id="hsync" class="sync"></div>
+  <div id="cards"></div>
+</div>
+
+<div id="add" style="display:none">
+  <div class="hd"><h1>Dodaj stanicu</h1><span><button class="back">✕</button></span></div>
+  <input id="q" placeholder="Ime ili broj stanice…" autocomplete="off" autocorrect="off" autocapitalize="off">
+  <div id="res" class="res"></div>
+</div>
+
+<div id="detail" style="display:none">
+  <div class="hd"><button class="back">←</button><span><button id="fbtn">Linije</button><button id="del">Ukloni</button></span></div>
+  <h1 id="dname" style="font-size:22px;margin:12px 0 0"></h1>
+  <div id="dsync" class="sync"></div>
+  <div id="dlist" class="big"></div>
+</div>
+
+</div>
+
+<div id="flt" class="modal" style="display:none"><div class="box"><h1>Linije na stanici</h1>
+  <div class="mut" style="font-size:14px;margin-bottom:8px">Ako ništa ne menjaš, prikazuju se sve linije.</div>
+  <div id="fl"></div>
+  <div class="btns"><button id="fall">Prikaži sve</button><button id="fclose">Gotovo</button></div>
+</div></div>
+
+<script>
+var API='https://nycbus.stevan-gajinov5.workers.dev',CITY='ns',REFRESH=15000;
+var COLORS=['#0039a6','#ff6319','#6cbe45','#b933ad','#ee352e','#00933c','#00add0','#996633','#fccc0a','#e6007e','#1b998b','#7a5195','#f2542d','#3a86ff'];
+function $(id){return document.getElementById(id)}
+function show(id,on){$(id).style.display=on?'':'none'}
+function color(n){var h=0,s=String(n);for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%997;return COLORS[h%COLORS.length]}
+function fmt(s){return s<60?'sad':Math.round(s/60)+' min'}
+function agoTxt(s){return s<60?s+' s':Math.floor(s/60)+' min'}
+function nat(a,b){var x=parseInt(a,10),y=parseInt(b,10);if(!isNaN(x)&&!isNaN(y)&&x!==y)return x-y;return a<b?-1:(a>b?1:0)}
+function indexOf(a,v){for(var i=0;i<a.length;i++)if(a[i]==v)return i;return -1}
+
+/* XHR umesto fetch-a (iOS 9 nema fetch) */
+function api(path,ok,fail){
+  var x=new XMLHttpRequest();x.open('GET',API+path,true);x.timeout=15000;
+  x.onload=function(){var j;try{j=JSON.parse(x.responseText)}catch(e){fail('neispravan odgovor');return}
+    if(x.status>=200&&x.status<300)ok(j);else fail((j&&j.error)||x.status)};
+  x.onerror=function(){fail('mreža')};x.ontimeout=function(){fail('vreme isteklo')};
+  x.send();
+}
+var ST=null,stQ=[];
+function stations(cb,fail){
+  if(ST)return cb(ST);
+  stQ.push([cb,fail]);if(stQ.length>1)return;
+  api('/api/stations?city='+CITY,function(j){ST=j;var q=stQ;stQ=[];for(var i=0;i<q.length;i++)q[i][0](ST)},
+    function(e){var q=stQ;stQ=[];for(var i=0;i<q.length;i++)q[i][1](e)});
+}
+var favs=[];
+try{var raw=JSON.parse(localStorage.getItem('favs')||'[]');for(var i=0;i<raw.length;i++)if((raw[i].city||CITY)==CITY)favs.push(raw[i])}catch(e){}
+function save(){try{localStorage.setItem('favs',JSON.stringify(favs))}catch(e){}}
+function favOf(f){for(var i=0;i<favs.length;i++)if(favs[i].uid==f.uid)return favs[i];return f}
+function isFav(f){for(var i=0;i<favs.length;i++)if(favs[i].uid==f.uid)return true;return false}
+
+var cur=null,timer=null,bodies=[],lastOk=0,nextAt=0;
+
+/* ---- status sinhronizacije ---- */
+function renderSync(){
+  var t;
+  if(!lastOk)t='Učitavam…';
+  else{var ago=Math.max(0,Math.round((Date.now()-lastOk)/1000)),left=Math.max(0,Math.ceil((nextAt-Date.now())/1000));
+    t='Sinhronizovano pre '+agoTxt(ago)+' · osvežavanje '+(left?'za '+left+' s':'…')}
+  $('hsync').textContent=t;$('dsync').textContent=t;
+}
+setInterval(renderSync,1000);
+function startTimer(fn){
+  if(timer)clearInterval(timer);nextAt=Date.now()+REFRESH;
+  timer=setInterval(function(){nextAt=Date.now()+REFRESH;fn()},REFRESH);renderSync();
+}
+
+function go(v,f){
+  cur=f||null;if(timer){clearInterval(timer);timer=null}lastOk=0;
+  show('home',v=='home');show('add',v=='add');show('detail',v=='detail');
+  if(v=='home'){buildHome();startTimer(refreshHome)}
+  if(v=='detail'){$('dname').textContent=f.name;$('dlist').innerHTML='';refreshDetail();startTimer(refreshDetail)}
+  if(v=='add'){$('q').value='';$('res').innerHTML='';stations(function(){},function(){})}
+}
+var backs=document.getElementsByClassName('back');
+for(var bi=0;bi<backs.length;bi++)backs[bi].onclick=function(){go('home')};
+$('plus').onclick=function(){go('add')};
+$('del').onclick=function(){if(confirm('Ukloni stanicu?')){var n=[];for(var i=0;i<favs.length;i++)if(favs[i].uid!=cur.uid)n.push(favs[i]);favs=n;save();go('home')}};
+
+/* ---- obrada linija ---- */
+var SEEN={};
+function smooth(k,lines){ // linija koja na tren nestane iz API-ja ostaje do 60 s
+  var now=Date.now(),m=SEEN[k]||(SEEN[k]={}),here={},i,id;
+  for(i=0;i<lines.length;i++){id=lines[i].number+'|'+lines[i].title;here[id]=1;m[id]={l:lines[i],t:now}}
+  for(id in m){if(here[id])continue;
+    var el=(now-m[id].t)/1000;if(el>60){delete m[id];continue}
+    var l=m[id].l,arr=[];
+    for(i=0;i<l.arrivals.length;i++){var a=l.arrivals[i],s=a.sec-el;if(s>-30)arr.push({sec:s,stops:a.stops,lat:a.lat,lon:a.lon})}
+    if(arr.length)lines.push({number:l.number,title:l.title,arrivals:arr})}
+  lines.sort(function(a,b){return a.arrivals[0].sec-b.arrivals[0].sec});
+  return lines;
+}
+function prep(f0,key,raw){
+  var f=favOf(f0),now=Date.now(),i;
+  if(!f.known)f.known=[];if(!f.seen)f.seen={};
+  for(i=0;i<raw.length;i++){var n=raw[i].number;if(indexOf(f.known,n)<0)f.known.push(n);f.seen[n]={t:now,title:raw[i].title}}
+  if(isFav(f))save();
+  var lines=smooth(key,raw),sel=(f.lines&&f.lines.length)?f.lines:null;
+  if(sel){
+    var out=[];
+    for(i=0;i<lines.length;i++)if(indexOf(sel,lines[i].number)>=0)out.push(lines[i]);
+    lines=out;
+    for(i=0;i<sel.length;i++){var have=false;
+      for(var j=0;j<lines.length;j++)if(lines[j].number==sel[i])have=true;
+      if(!have){var s=f.seen[sel[i]];lines.push({number:sel[i],title:s?s.title:'',arrivals:[],idle:true,seen:s?s.t:0})}}
+  }
+  lines.sort(function(a,b){
+    if(!!a.idle!==!!b.idle)return a.idle?1:-1;
+    return a.idle?nat(a.number,b.number):a.arrivals[0].sec-b.arrivals[0].sec});
+  return lines;
+}
+function mk(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e}
+function rows(el,lines,max){
+  el.innerHTML='';
+  if(!lines.length){el.appendChild(mk('div','msg','Nema nailazećih vozila.'));return}
+  for(var i=0;i<lines.length&&i<max;i++){
+    var l=lines[i],a=l.arrivals[0],live=!!(a&&a.lat&&a.lon);
+    var r=mk('div','row'+(l.idle?' idle':'')),b=mk('div','bullet',l.number);b.style.background=color(l.number);
+    var d=mk('div','dest'),t=mk('b'),sm=mk('small'),eta=mk('div','eta'),sp=mk('span'),es=mk('small');
+    if(l.idle){
+      t.textContent=l.title||'Nema vozila uživo';
+      sm.textContent=(l.title?'Nema vozila uživo':'')+(l.seen?(l.title?' · ':'')+'viđeno pre '+agoTxt(Math.round((Date.now()-l.seen)/1000)):'');
+      sp.textContent='—';
+    }else{
+      t.textContent=l.title;
+      if(l.arrivals.length>1){var z=[];for(var k=1;k<l.arrivals.length&&k<3;k++)z.push(fmt(l.arrivals[k].sec));sm.textContent='Zatim: '+z.join(', ')}
+      sp.textContent=fmt(a.sec);
+      var dot=mk('i','tr '+(live?'on':'off'));dot.title=live?'Prati se uživo':'Bez GPS signala';
+      sp.insertBefore(dot,sp.firstChild);
+      es.textContent=a.stops>0?a.stops+(a.stops==1?' stanica':' stanice'):'';
+    }
+    d.appendChild(t);d.appendChild(sm);eta.appendChild(sp);eta.appendChild(es);
+    r.appendChild(b);r.appendChild(d);r.appendChild(eta);el.appendChild(r);
+  }
+}
+
+/* ---- početni ekran ---- */
+function openFav(f){return function(){go('detail',f)}}
+function buildHome(){
+  var box=$('cards');box.innerHTML='';bodies=[];
+  if(!favs.length){box.appendChild(mk('div','msg','Još nema stanica. Pritisni „+ Dodaj“.'));return}
+  for(var i=0;i<favs.length;i++){
+    var c=mk('div','card'),h=mk('h2'),b=mk('b',null,favs[i].name),s=mk('span',null,'#'+favs[i].id),body=mk('div','body mut','učitavam…');
+    h.appendChild(b);h.appendChild(s);c.appendChild(h);c.appendChild(body);c.onclick=openFav(favs[i]);
+    box.appendChild(c);bodies.push(body);
+  }
+  refreshHome();
+}
+function refreshOne(f,i){
+  api('/api/arrivals?city='+CITY+'&uid='+encodeURIComponent(f.uid),function(raw){
+    lastOk=Date.now();if(bodies[i])rows(bodies[i],prep(f,'h'+f.uid,raw),(f.lines&&f.lines.length)?f.lines.length:3);renderSync()
+  },function(e){if(bodies[i])bodies[i].textContent='Greška: '+e});
+}
+function refreshHome(){for(var i=0;i<favs.length;i++)refreshOne(favs[i],i)}
+
+/* ---- stanica ---- */
+function refreshDetail(){
+  var f=cur;if(!f)return;
+  api('/api/arrivals?city='+CITY+'&uid='+encodeURIComponent(f.uid),function(raw){
+    if(cur!==f)return;lastOk=Date.now();rows($('dlist'),prep(f,'d'+f.uid,raw),30);renderSync();
+  },function(e){if(cur!==f)return;var d=$('dlist');d.innerHTML='';d.appendChild(mk('div','msg err','Greška: '+e))});
+}
+
+/* ---- filter linija ---- */
+function renderFlt(){
+  var f=favOf(cur),box=$('fl'),known=(f.known||[]).slice().sort(nat);
+  box.innerHTML='';
+  if(!known.length){box.appendChild(mk('div','mut','Još nije viđena nijedna linija. Pokušaj za koji trenutak.'));return}
+  var sel=(f.lines&&f.lines.length)?f.lines:known;
+  for(var i=0;i<known.length;i++){
+    var lab=mk('label','fr'),cb=document.createElement('input');cb.type='checkbox';cb.checked=indexOf(sel,known[i])>=0;
+    var b=mk('span','bullet',known[i]);b.style.background=color(known[i]);
+    cb.onchange=function(){
+      var inputs=box.getElementsByTagName('input'),on=[];
+      for(var k=0;k<inputs.length;k++)if(inputs[k].checked)on.push(known[k]);
+      f.lines=(on.length==known.length||!on.length)?[]:on; // sve ili ništa = sve linije
+      save();renderFlt();refreshDetail();
+    };
+    lab.appendChild(cb);lab.appendChild(b);box.appendChild(lab);
+  }
+}
+$('fbtn').onclick=function(){renderFlt();show('flt',true)};
+$('fall').onclick=function(){favOf(cur).lines=[];save();renderFlt();refreshDetail()};
+$('fclose').onclick=function(){show('flt',false)};
+
+/* ---- dodavanje stanice ---- */
+function addFav(s){return function(){if(!isFav(s)){favs.push({city:CITY,uid:s.uid,id:s.id,name:s.name});save()}go('home')}}
+$('q').oninput=function(){
+  var q=this.value.replace(/^\s+|\s+$/g,'').toLowerCase(),box=$('res');box.innerHTML='';if(!q)return;
+  box.appendChild(mk('div','mut','Učitavam stanice…'));
+  stations(function(sts){
+    if($('q').value.replace(/^\s+|\s+$/g,'').toLowerCase()!==q)return;
+    box.innerHTML='';var n=0;
+    for(var i=0;i<sts.length&&n<30;i++){var s=sts[i];
+      if(s.name.toLowerCase().indexOf(q)>=0||String(s.id).toLowerCase()==q){
+        var d=mk('div'),b=mk('b',null,s.name),sm=mk('small','mut',' #'+s.id);d.appendChild(b);d.appendChild(sm);d.onclick=addFav(s);box.appendChild(d);n++}}
+    if(!n)box.appendChild(mk('div','mut','Nema rezultata.'));
+  },function(e){box.innerHTML='';box.appendChild(mk('div','err','Greška: '+e))});
+};
+
+go('home');if(!favs.length)go('add');
+</script></body></html>
